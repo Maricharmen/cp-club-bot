@@ -6,7 +6,7 @@ Bot oficial para la gestión automatizada de asistencias, seguimiento de progres
 
 ## 🛠️ Guía Rápida para Administradores y Mentores
 
-Todos los comandos administrativos requieren el permiso de **Gestionar Servidor (`Manage Server`)** en Discord.
+Los comandos administrativos requieren permisos de administración o gestión de canales según el comando. El bot debe tener los permisos indicados en la sección de configuración.
 
 | Comando | Descripción | Ejemplo de Uso |
 | :--- | :--- | :--- |
@@ -17,6 +17,8 @@ Todos los comandos administrativos requieren el permiso de **Gestionar Servidor 
 | `/calificar-mock` | Asigna puntaje numérico (0-100) y retroalimentación técnica de una Mock Interview. | `/calificar-mock correo:alumno@uady.mx sesion_id:2 puntaje:85 feedback:Buen manejo de DP` |
 | `/calificar-concurso` | Registra manualmente una calificación individual extemporánea. | `/calificar-concurso correo:alumno@uady.mx sesion_id:1 puntaje:60` |
 | `/justificar-falta` | Registra una ausencia justificada para que compute a favor del porcentaje de asistencia. | `/justificar-falta correo:alumno@uady.mx sesion_id:1 motivo:Cruce de horario académico` |
+| `/crear-canal-voz` | Crea un canal principal que genera canales personales automáticamente. | `/crear-canal-voz nombre:Sala CPC categoria_id:123456789012345678` |
+| `/configurar-logs-voz` | Selecciona el canal de texto donde se registran los eventos de voz. | `/configurar-logs-voz canal:#logs-voz` |
 
 ### 📋 Flujo de Trabajo Semanal Recomendado
 
@@ -37,6 +39,24 @@ Comandos públicos disponibles para todos los miembros registrados en el club.
 | `/mi-progreso` | Muestra tu porcentaje de asistencia en CPC y HUB, puntos acumulados, feedback de mentores y estatus de elegibilidad para la **Industry Mock**. | En cualquier momento para auditar tu rendimiento. |
 | `/leaderboard` | Despliega la tabla de clasificación Top 10 general o filtrada por track (`CPC` o `HUB`). | Para consultar el ranking competitivo semanal. |
 
+## 🔊 Canales de Voz Dinámicos
+
+Los administradores pueden crear tantos canales principales como necesiten, incluso en categorías diferentes. Para crear uno, activa el **Modo desarrollador** de Discord, copia el ID de la categoría y ejecuta:
+
+`/crear-canal-voz nombre:Sala CPC categoria_id:ID_DE_LA_CATEGORIA`
+
+Cada persona que entre a un canal principal recibirá su propio canal de voz dentro de la misma categoría. El canal se elimina automáticamente cuando queda vacío. El propietario puede cambiarlo desde los permisos de Discord o usando:
+
+`/configurar-mi-canal-voz nombre:Mi sala limite:5`
+
+El bot guarda los IDs de los canales principales, dinámicos y de logs en `data/voice-channels.json` para recuperarlos después de reiniciarse. No edites este archivo mientras el bot esté funcionando.
+
+Para configurar el canal de auditoría de voz, un administrador debe ejecutar:
+
+`/configurar-logs-voz canal:#logs-voz`
+
+El bot registrará la creación de canales principales, las entradas y salidas de usuarios, la creación de canales personales y su cierre automático. El comando requiere el permiso `Manage Server`.
+
 ---
 
 ## ⚙️ Arquitectura Técnica y Configuración
@@ -46,20 +66,66 @@ Comandos públicos disponibles para todos los miembros registrados en el club.
 * Base de datos PostgreSQL en **Supabase**.
 * Aplicación y Bot configurados en el **Discord Developer Portal**.
 
+### Variables de Entorno
+
+Crea un archivo `.env` en la raíz del proyecto, junto a `index.js`:
+
+```env
+DISCORD_TOKEN=token_del_bot
+CLIENT_ID=id_de_la_aplicacion
+GUILD_ID=id_del_servidor
+SUPABASE_URL=https://tu-proyecto.supabase.co
+SUPABASE_KEY=tu-anon-public-key
+```
+
+Puedes obtener la URL y la key desde Supabase en `Project Settings > Data API`. Usa una base de datos de pruebas si no quieres modificar datos reales. Nunca publiques `.env` ni compartas sus valores.
+
+### Permisos del Bot en Discord
+
+Al invitar el bot, selecciona los scopes `bot` y `applications.commands`. Para los canales de voz dinámicos necesita:
+
+* `View Channels`
+* `Send Messages`
+* `Embed Links`
+* `Manage Channels`
+* `Move Members`
+* `Connect`
+* `Speak`
+
+El bot también necesita acceso al canal de texto configurado para los logs.
+
 ## Inicialización y Despliegue
 
-# 1. Instalar dependencias
-`npm install`
+1. Instalar dependencias:
 
-# 2. Desplegar / Actualizar Slash Commands en Discord
-`node deploy-commands.js`
+   `npm install`
 
-# 3. Iniciar el bot en producción
-`node index.js`
+2. Desplegar o actualizar los slash commands:
+
+   `node deploy-commands.js`
+
+3. Iniciar el bot:
+
+   `node index.js`
+
+La terminal debe permanecer abierta. Para probar cambios antes de subirlos a GitHub, usa un segundo bot de Discord y, preferiblemente, un servidor y proyecto de Supabase de pruebas. No conectes localmente el mismo token que ya está conectado en producción.
 
 ### Plan de Prueba Inmediato en Discord
 
-Ejecuta estas pruebas en orden para validar el sistema:
+Para probar los canales de voz dinámicos:
+
+1. Inicia el bot con `node index.js`.
+2. Crea un canal de texto llamado `logs-voz`.
+3. Ejecuta `/configurar-logs-voz` y selecciona `#logs-voz`.
+4. Copia el ID de una categoría y ejecuta `/crear-canal-voz` con el nombre y `categoria_id`.
+5. Entra al canal principal. Debe crearse un canal personal y Discord debe moverte automáticamente a él.
+6. Ejecuta `/configurar-mi-canal-voz nombre:Mi sala limite:5` dentro del canal personal.
+7. Sal del canal. Al quedar vacío, debe eliminarse y aparecer un log de cierre.
+8. Repite `/crear-canal-voz` usando otra categoría para verificar que pueden existir varios canales principales.
+
+Los eventos de entrada, salida, creación y eliminación se publican en `#logs-voz`. Si no ocurre nada, verifica que el bot tenga `Manage Channels`, `Move Members` y el intent de estados de voz habilitado en el código.
+
+Para probar el resto del bot, ejecuta estas pruebas en orden:
 
 1. **Prueba de Vinculación:**  
    Escribe `/vincular correo:tu_correo@institucion.edu codeforces:Maricharmen`.  

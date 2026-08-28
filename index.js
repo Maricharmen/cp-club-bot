@@ -1,8 +1,6 @@
 // index.js
-require('dotenv').config();
+require('./src/config');
 const {
-  Client,
-  GatewayIntentBits,
   EmbedBuilder,
   ActionRowBuilder,
   ModalBuilder,
@@ -10,32 +8,16 @@ const {
   TextInputStyle,
   MessageFlags
 } = require('discord.js');
-const { createClient } = require('@supabase/supabase-js');
+const supabase = require('./src/services/supabase');
+const { createDiscordClient } = require('./src/client');
+const { generarCodigoOTP } = require('./src/utils');
+const dynamicVoiceChannels = require('./src/features/dynamicVoiceChannels');
 
 // ==========================================
 // 1. INICIALIZACIÓN
 // ==========================================
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_KEY,
-  { auth: { persistSession: false } }
-);
-
-const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages
-  ]
-});
-
-function generarCodigoOTP(longitud = 6) {
-  const caracteres = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let codigo = '';
-  for (let i = 0; i < longitud; i++) {
-    codigo += caracteres.charAt(Math.floor(Math.random() * caracteres.length));
-  }
-  return codigo;
-}
+const client = createDiscordClient();
+dynamicVoiceChannels.setupDynamicVoiceChannels(client);
 
 client.once('ready', () => {
   console.log(`🤖 CP Club Bot conectado exitosamente como: ${client.user.tag}`);
@@ -199,6 +181,10 @@ client.on('interactionCreate', async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
   const { commandName, options } = interaction;
+
+  if (commandName === 'crear-canal-voz' || commandName === 'configurar-mi-canal-voz' || commandName === 'configurar-logs-voz') {
+    return dynamicVoiceChannels.handleCommand(interaction);
+  }
 
   // 1. /vincular
   if (commandName === 'vincular') {
