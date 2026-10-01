@@ -14,5 +14,6 @@ const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
     console.log('Slash Commands actualizados exitosamente en Discord.');
   } catch (error) {
     console.error('Error al desplegar comandos:', error);
+    process.exitCode = 1;
   }
 })();

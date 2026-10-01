@@ -19,6 +19,8 @@ Los comandos administrativos requieren permisos de administración o gestión de
 | `/justificar-falta` | Registra una ausencia justificada para que compute a favor del porcentaje de asistencia. | `/justificar-falta correo:alumno@uady.mx sesion_id:1 motivo:Cruce de horario académico` |
 | `/crear-canal-voz` | Crea un canal principal que genera canales personales automáticamente. | `/crear-canal-voz nombre:Sala CPC categoria_id:123456789012345678` |
 | `/configurar-logs-voz` | Selecciona el canal de texto donde se registran los eventos de voz. | `/configurar-logs-voz canal:#logs-voz` |
+| `/crear-equipo` | Abre una interfaz para crear un rol de equipo con nombre, color y hasta 2 compañeros. | `/crear-equipo` |
+| `/gestionar-equipo` | Abre una interfaz para reemplazar los compañeros de tu equipo. | `/gestionar-equipo` |
 
 ### 📋 Flujo de Trabajo Semanal Recomendado
 
@@ -56,6 +58,12 @@ Para configurar el canal de auditoría de voz, un administrador debe ejecutar:
 `/configurar-logs-voz canal:#logs-voz`
 
 El bot registrará la creación de canales principales, las entradas y salidas de usuarios, la creación de canales personales y su cierre automático. El comando requiere el permiso `Manage Server`.
+
+## 👥 Equipos
+
+Un usuario puede crear un solo equipo con `/crear-equipo`. El bot pedirá el nombre y un color hexadecimal (por ejemplo, `#F4511E`) y después mostrará un selector para elegir hasta 2 compañeros; el creador siempre forma parte del equipo. El rol se asigna automáticamente a las tres personas seleccionadas como máximo.
+
+Para cambiar integrantes, usa `/gestionar-equipo`, selecciona los compañeros que deben conservar el rol y pulsa **Guardar miembros**. Seleccionar cero compañeros deja únicamente al creador, por lo que también sirve para retirar integrantes. El rol se borra automáticamente si queda sin miembros, y sus datos se guardan en `data/team-roles.json`.
 
 ---
 

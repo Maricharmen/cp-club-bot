@@ -12,12 +12,14 @@ const supabase = require('./src/services/supabase');
 const { createDiscordClient } = require('./src/client');
 const { generarCodigoOTP } = require('./src/utils');
 const dynamicVoiceChannels = require('./src/features/dynamicVoiceChannels');
+const teams = require('./src/features/teams');
 
 // ==========================================
 // 1. INICIALIZACIÓN
 // ==========================================
 const client = createDiscordClient();
 dynamicVoiceChannels.setupDynamicVoiceChannels(client);
+teams.setupTeams(client);
 
 client.once('ready', () => {
   console.log(`🤖 CP Club Bot conectado exitosamente como: ${client.user.tag}`);
@@ -32,6 +34,10 @@ client.on('interactionCreate', async (interaction) => {
   // A. MANEJO DE MODALS (/importar-standings Multi-Formato)
   // ----------------------------------------------------
   if (interaction.isModalSubmit()) {
+    if (interaction.customId === 'team_create_modal') {
+      return teams.handleModal(interaction);
+    }
+
     if (interaction.customId.startsWith('modal_standings_')) {
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
@@ -175,12 +181,23 @@ client.on('interactionCreate', async (interaction) => {
     return;
   }
 
+  if (interaction.isUserSelectMenu() && interaction.customId === 'team_members') {
+    return teams.handleMemberSelect(interaction);
+  }
+
+  if (interaction.isButton() && ['team_confirm', 'team_cancel'].includes(interaction.customId)) {
+    return teams.handleButton(interaction);
+  }
+
   // ----------------------------------------------------
   // B. MANEJO DE SLASH COMMANDS
   // ----------------------------------------------------
   if (!interaction.isChatInputCommand()) return;
 
   const { commandName, options } = interaction;
+
+  if (commandName === 'crear-equipo') return teams.handleCreateCommand(interaction);
+  if (commandName === 'gestionar-equipo') return teams.handleManageCommand(interaction);
 
   if (commandName === 'crear-canal-voz' || commandName === 'configurar-mi-canal-voz' || commandName === 'configurar-logs-voz') {
     return dynamicVoiceChannels.handleCommand(interaction);

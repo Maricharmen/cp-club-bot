@@ -101,7 +101,15 @@ const commands = [
       .setName('canal')
       .setDescription('Canal de texto para los logs')
       .addChannelTypes(ChannelType.GuildText)
-      .setRequired(true))
+      .setRequired(true)),
+
+  new SlashCommandBuilder()
+    .setName('crear-equipo')
+    .setDescription('Crea un equipo de hasta 3 personas con nombre y color personalizados'),
+
+  new SlashCommandBuilder()
+    .setName('gestionar-equipo')
+    .setDescription('Modifica los compañeros que forman parte de tu equipo')
 ].map(command => command.toJSON());
 
 module.exports = commands;

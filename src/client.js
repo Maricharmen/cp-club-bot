@@ -5,7 +5,8 @@ function createDiscordClient() {
     intents: [
       GatewayIntentBits.Guilds,
       GatewayIntentBits.GuildMessages,
-      GatewayIntentBits.GuildVoiceStates
+      GatewayIntentBits.GuildVoiceStates,
+      GatewayIntentBits.GuildMembers
     ]
   });
 }
