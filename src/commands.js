@@ -2,6 +2,10 @@ const { ChannelType, SlashCommandBuilder, PermissionFlagsBits } = require('disco
 
 const commands = [
   new SlashCommandBuilder()
+    .setName('help')
+    .setDescription('Muestra una guía navegable con todos los comandos del bot'),
+
+  new SlashCommandBuilder()
     .setName('vincular')
     .setDescription('Vincula tu cuenta de Discord con tu correo y handle de Codeforces')
     .addStringOption(opt => opt.setName('correo').setDescription('Tu correo institucional registrado').setRequired(true))
@@ -109,7 +113,59 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName('gestionar-equipo')
-    .setDescription('Modifica los compañeros que forman parte de tu equipo')
+    .setDescription('Modifica los compañeros que forman parte de tu equipo'),
+
+  new SlashCommandBuilder()
+    .setName('salir-equipo')
+    .setDescription('Sale de un equipo del que eres miembro'),
+
+  new SlashCommandBuilder()
+    .setName('cumpleanos')
+    .setDescription('Registra o actualiza tu cumpleaños')
+    .addIntegerOption(opt => opt
+      .setName('mes')
+      .setDescription('Mes de tu cumpleaños, del 1 al 12')
+      .setMinValue(1)
+      .setMaxValue(12)
+      .setRequired(true))
+    .addIntegerOption(opt => opt
+      .setName('dia')
+      .setDescription('Día de tu cumpleaños, del 1 al 31')
+      .setMinValue(1)
+      .setMaxValue(31)
+      .setRequired(true)),
+
+  new SlashCommandBuilder()
+    .setName('configurar-canal-cumpleanos')
+    .setDescription('Configura el canal de los recordatorios de cumpleaños')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .addChannelOption(opt => opt
+      .setName('canal')
+      .setDescription('Canal de texto para los recordatorios')
+      .addChannelTypes(ChannelType.GuildText)
+      .setRequired(true)),
+
+  new SlashCommandBuilder()
+    .setName('listar-cumpleanos')
+    .setDescription('Muestra los cumpleaños registrados de un mes')
+    .addIntegerOption(opt => opt
+      .setName('mes')
+      .setDescription('Mes que quieres consultar, del 1 al 12')
+      .setMinValue(1)
+      .setMaxValue(12)
+      .setRequired(true)),
+
+  new SlashCommandBuilder()
+    .setName('listar-equipos')
+    .setDescription('Muestra todos los equipos creados y sus miembros'),
+
+  new SlashCommandBuilder()
+    .setName('eliminar-equipo')
+    .setDescription('Elimina un equipo y su rol de Discord')
+    .addRoleOption(opt => opt
+      .setName('equipo')
+      .setDescription('Rol del equipo que deseas eliminar')
+      .setRequired(false))
 ].map(command => command.toJSON());
 
 module.exports = commands;

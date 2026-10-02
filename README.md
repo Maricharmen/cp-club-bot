@@ -19,8 +19,19 @@ Los comandos administrativos requieren permisos de administración o gestión de
 | `/justificar-falta` | Registra una ausencia justificada para que compute a favor del porcentaje de asistencia. | `/justificar-falta correo:alumno@uady.mx sesion_id:1 motivo:Cruce de horario académico` |
 | `/crear-canal-voz` | Crea un canal principal que genera canales personales automáticamente. | `/crear-canal-voz nombre:Sala CPC categoria_id:123456789012345678` |
 | `/configurar-logs-voz` | Selecciona el canal de texto donde se registran los eventos de voz. | `/configurar-logs-voz canal:#logs-voz` |
-| `/crear-equipo` | Abre una interfaz para crear un rol de equipo con nombre, color y hasta 2 compañeros. | `/crear-equipo` |
+| `/crear-equipo` | Abre una interfaz para crear un rol de equipo con nombre, color y hasta 3 compañeros. | `/crear-equipo` |
 | `/gestionar-equipo` | Abre una interfaz para reemplazar los compañeros de tu equipo. | `/gestionar-equipo` |
+| `/salir-equipo` | Retira tu usuario de un equipo sin eliminarlo. | `/salir-equipo` |
+| `/salir-equipo` | Retira tu usuario de un equipo sin eliminarlo. | `/salir-equipo` |
+| `/help` | Abre una guía navegable por secciones con todos los comandos del bot. | `/help` |
+| `/listar-equipos` | Muestra todos los equipos del servidor, sus propietarios y miembros actuales. | `/listar-equipos` |
+
+### 🎂 Cumpleaños
+
+Cada persona puede registrar o actualizar su cumpleaños con `/cumpleanos mes:MM dia:DD`. Un administrador puede elegir el canal de avisos con `/configurar-canal-cumpleanos canal:#cumpleanos`. El bot publica una lista del mes y un recordatorio el día correspondiente; también puedes consultar un mes con `/listar-cumpleanos mes:MM`.
+
+Los cumpleaños y el canal se guardan en `data/birthdays.json`. El bot usa `America/Merida` como zona horaria por defecto; puedes cambiarla con la variable `BIRTHDAY_TIMEZONE`.
+| `/eliminar-equipo` | Elimina un equipo y su rol asociado. | `/eliminar-equipo equipo:@NombreDelEquipo` |
 
 ### 📋 Flujo de Trabajo Semanal Recomendado
 
@@ -61,9 +72,11 @@ El bot registrará la creación de canales principales, las entradas y salidas d
 
 ## 👥 Equipos
 
-Un usuario puede crear un solo equipo con `/crear-equipo`. El bot pedirá el nombre y un color hexadecimal (por ejemplo, `#F4511E`) y después mostrará un selector para elegir hasta 2 compañeros; el creador siempre forma parte del equipo. El rol se asigna automáticamente a las tres personas seleccionadas como máximo.
+Un usuario puede crear un solo equipo con `/crear-equipo`. El bot pedirá el nombre y un color hexadecimal (por ejemplo, `#F4511E`) y después mostrará un selector para elegir hasta 3 compañeros; el creador siempre forma parte del equipo. El rol se asigna automáticamente a las cuatro personas seleccionadas como máximo.
 
-Para cambiar integrantes, usa `/gestionar-equipo`, selecciona los compañeros que deben conservar el rol y pulsa **Guardar miembros**. Seleccionar cero compañeros deja únicamente al creador, por lo que también sirve para retirar integrantes. El rol se borra automáticamente si queda sin miembros, y sus datos se guardan en `data/team-roles.json`.
+Para cambiar integrantes, usa `/gestionar-equipo`, selecciona los compañeros que deben conservar el rol y pulsa **Guardar miembros**. Seleccionar cero compañeros deja únicamente al creador, por lo que también sirve para retirar integrantes. Un miembro que no sea el propietario puede usar `/salir-equipo` para retirarse sin afectar al resto. El rol se borra automáticamente si queda sin miembros, y sus datos se guardan en `data/team-roles.json`.
+
+Para consultar todos los equipos del servidor, usa `/listar-equipos`. El propietario puede eliminar su propio equipo con `/eliminar-equipo` sin indicar el rol; un administrador con permiso `Manage Server` puede indicar el rol del equipo para eliminar cualquiera. Al eliminarlo, el bot borra el rol de Discord y su registro persistido.
 
 ---
 
@@ -84,6 +97,7 @@ CLIENT_ID=id_de_la_aplicacion
 GUILD_ID=id_del_servidor
 SUPABASE_URL=https://tu-proyecto.supabase.co
 SUPABASE_KEY=tu-anon-public-key
+BIRTHDAY_TIMEZONE=America/Merida
 ```
 
 Puedes obtener la URL y la key desde Supabase en `Project Settings > Data API`. Usa una base de datos de pruebas si no quieres modificar datos reales. Nunca publiques `.env` ni compartas sus valores.
@@ -101,6 +115,8 @@ Al invitar el bot, selecciona los scopes `bot` y `applications.commands`. Para l
 * `Speak`
 
 El bot también necesita acceso al canal de texto configurado para los logs.
+
+Para `/crear-equipo`, el bot necesita el permiso `Manage Roles` y su rol debe estar por encima de los roles de equipo en la jerarquía del servidor.
 
 ## Inicialización y Despliegue
 

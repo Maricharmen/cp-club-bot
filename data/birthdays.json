@@ -1,0 +1,20 @@
+{
+  "channels": [
+    {
+      "guildId": "1246861386789683232",
+      "channelId": "1555699204637069474"
+    }
+  ],
+  "birthdays": [
+    {
+      "guildId": "1246861386789683232",
+      "userId": "715605414384762981",
+      "month": 7,
+      "day": 3
+    }
+  ],
+  "notifications": {
+    "monthly": {},
+    "daily": {}
+  }
+}
