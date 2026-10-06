@@ -18,11 +18,14 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName('leaderboard')
-    .setDescription('Muestra la tabla de clasificación por puntaje de actividades y asistencia')
-    .addStringOption(opt => opt.setName('programa').setDescription('Filtrar por track o ver el ranking global').setRequired(false).addChoices(
-      { name: '🌐 General', value: 'GENERAL' },
-      { name: '💻 CPC', value: 'CPC' },
-      { name: '💼 HUB', value: 'HUB' }
+    .setDescription('Muestra la tabla de clasificación por rangos (Sistema 12 Semanas)')
+    .addStringOption(opt => opt.setName('rango').setDescription('Filtrar estudiantes de un rango específico').setRequired(false).addChoices(
+      { name: '👑 Master (2,000 - 2,200 XP)', value: 'Master' },
+      { name: '🔴 Competitor (1,600 - 1,999 XP)', value: 'Competitor' },
+      { name: '🟠 Challenger (1,200 - 1,599 XP)', value: 'Challenger' },
+      { name: '🟣 Solver (800 - 1,199 XP)', value: 'Solver' },
+      { name: '🔵 Explorer (400 - 799 XP)', value: 'Explorer' },
+      { name: '🌱 Rookie (1 - 399 XP)', value: 'Rookie' }
     )),
 
   new SlashCommandBuilder()

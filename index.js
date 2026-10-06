@@ -3,16 +3,29 @@ require('./src/config');
 const {
   EmbedBuilder,
   ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
   MessageFlags
 } = require('discord.js');
+
 const supabase = require('./src/services/supabase');
+const { getActiveCycle } = require('./src/services/cycles');
 const { createDiscordClient } = require('./src/client');
 const { generarCodigoOTP } = require('./src/utils');
 const dynamicVoiceChannels = require('./src/features/dynamicVoiceChannels');
 const teams = require('./src/features/teams');
+const {
+  RANKS,
+  getRank,
+  getRankProgress,
+  generateProgressBar,
+  groupStudentsByRank,
+  checkLevelUp,
+  getEarnedBadges
+} = require('./src/features/ranks');
 
 // ==========================================
 // 1. INICIALIZACIÓN
@@ -428,39 +441,92 @@ client.on('interactionCreate', async (interaction) => {
 
       if (errEst || !estudiante) {
         return interaction.editReply(
-          '❌ Tu cuenta no está vinculada. Usa `/vincular correo:tu_correo@institucion.edu` para comenzar.'
+          '❌ Tu cuenta no está vinculada. Usa `/vincular correo:tu_correo@alumnos.uady.mx` para comenzar.'
         );
       }
 
+      const { data: cicloActivo, error: errCiclo } = await getActiveCycle();
+      if (errCiclo || !cicloActivo) {
+        return interaction.editReply('❌ No hay un ciclo académico activo configurado.');
+      }
+
+      // Traer sesiones incluyendo el campo 'tipo'
       const { data: sesiones, error: errSes } = await supabase
         .from('sesiones')
-        .select('id, nombre, programa, fecha');
+        .select('id, nombre, programa, modulo, fecha, tipo, ciclo_id')
+        .eq('ciclo_id', cicloActivo.id);
 
-      const { data: registros, error: errReg } = await supabase
-        .from('registro_sesion')
-        .select('sesion_id, asistencia, puntaje_actividad, feedback')
-        .eq('estudiante_id', estudiante.id);
+      const sessionIds = (sesiones || []).map(sesion => sesion.id);
+      const { data: registros, error: errReg } = sessionIds.length > 0
+        ? await supabase
+          .from('registro_sesion')
+          .select('sesion_id, asistencia, puntaje_actividad, feedback')
+          .eq('estudiante_id', estudiante.id)
+          .in('sesion_id', sessionIds)
+        : { data: [], error: null };
 
       if (errSes || errReg) {
         return interaction.editReply('❌ Error al consultar tus estadísticas.');
       }
 
+      // Mapear registros y acumular puntos
       const mapaRegistros = new Map();
       let puntajeTotal = 0;
       const feedbacksRecientes = [];
 
       registros.forEach(r => {
         mapaRegistros.set(r.sesion_id, r);
-        if (r.puntaje_actividad) puntajeTotal += parseFloat(r.puntaje_actividad);
+        const pts = parseFloat(r.puntaje_actividad);
+        if (!isNaN(pts) && pts > 0) {
+          puntajeTotal += pts;
+        }
         if (r.feedback) feedbacksRecientes.push(r.feedback);
       });
 
+      // Cálculo de rangos y barra de progreso
+      const progressInfo = getRankProgress(puntajeTotal);
+      const currentRank = progressInfo.currentRank;
+      const nextRank = progressInfo.nextRank;
+      const progressBar = generateProgressBar(progressInfo.percentage, 10);
+
+      // Desglose de actividades completadas por tipo (PRACTICA, INTEGRADOR, MOCK)
+      const mapaSesiones = new Map();
+      sesiones.forEach(s => mapaSesiones.set(s.id, s));
+
+      const sesionesPractica = sesiones.filter(s => s.tipo === 'PRACTICA');
+      const sesionesIntegradores = sesiones.filter(s => s.tipo === 'INTEGRADOR');
+      const sesionesMock = sesiones.filter(s => s.tipo === 'MOCK');
+
+      const practicasCompletadas = registros.filter(r => {
+        const ses = mapaSesiones.get(r.sesion_id);
+        return ses?.tipo === 'PRACTICA' && parseFloat(r.puntaje_actividad) > 0;
+      }).length;
+
+      const integradoresCompletados = registros.filter(r => {
+        const ses = mapaSesiones.get(r.sesion_id);
+        return ses?.tipo === 'INTEGRADOR' && parseFloat(r.puntaje_actividad) > 0;
+      }).length;
+
+      const mocksCompletados = registros.filter(r => {
+        const ses = mapaSesiones.get(r.sesion_id);
+        return ses?.tipo === 'MOCK' && parseFloat(r.puntaje_actividad) > 0;
+      }).length;
+
+      const badgesGanados = getEarnedBadges({
+        practicas: practicasCompletadas,
+        totalPracticas: sesionesPractica.length,
+        integradores: integradoresCompletados,
+        totalIntegradores: sesionesIntegradores.length,
+        mocks: mocksCompletados,
+        totalMocks: sesionesMock.length
+      });
+
+      // Cálculo de asistencias y elegibilidad para Industry Mock (asistencia >= 80%)
       const sesionesCPC = sesiones.filter(s => s.programa === 'CPC');
       const asistidasCPC = sesionesCPC.filter(s => {
         const reg = mapaRegistros.get(s.id);
         return reg && (reg.asistencia === 'PRESENTE' || reg.asistencia === 'JUSTIFICADO');
       }).length;
-
       const pctCPC = sesionesCPC.length > 0 ? ((asistidasCPC / sesionesCPC.length) * 100).toFixed(0) : 'N/A';
 
       const sesionesHUB = sesiones.filter(s => s.programa === 'HUB');
@@ -468,21 +534,49 @@ client.on('interactionCreate', async (interaction) => {
         const reg = mapaRegistros.get(s.id);
         return reg && (reg.asistencia === 'PRESENTE' || reg.asistencia === 'JUSTIFICADO');
       }).length;
-
       const pctHUB = sesionesHUB.length > 0 ? ((asistidasHUB / sesionesHUB.length) * 100).toFixed(0) : 'N/A';
 
       const elegible = (pctCPC !== 'N/A' && parseFloat(pctCPC) >= 80) || (pctHUB !== 'N/A' && parseFloat(pctHUB) >= 80);
 
+      // Colores temáticos por rango
+      const rankColors = {
+        Rookie: 0x2ECC71,      // Verde
+        Explorer: 0x3498DB,    // Azul
+        Solver: 0x9B59B6,      // Morado
+        Challenger: 0xE67E22,  // Naranja
+        Competitor: 0xE74C3C,  // Rojo
+        Master: 0xF1C40F       // Dorado
+      };
+      const embedColor = rankColors[currentRank.name] || 0x3498DB;
+
+      // Armar bloque de próximo rango
+      let proximoRangoTexto = '👑 **Nivel Máximo Alcanzado**';
+      if (nextRank) {
+        proximoRangoTexto =
+          `**Próximo rango:** ${nextRank.badge}${nextRank.name}\n` +
+          `\`${progressInfo.remainingXP} XP restantes\`\n` +
+          `\`${progressBar}\``;
+      }
+
       const embed = new EmbedBuilder()
-        .setTitle(`📊 Progreso General: ${estudiante.nombre}`)
-        .setColor(elegible ? 0x00A86B : 0xE67E22)
+        .setTitle(`👤 Progreso Académico • ${estudiante.nombre}`)
+        .setColor(embedColor)
         .setDescription(
           `**Correo:** \`${estudiante.correo}\`\n` +
           `**Codeforces:** \`${estudiante.codeforces_handle || 'No vinculado'}\`\n` +
-          `**Puntaje Total Acumulado:** \`${puntajeTotal.toFixed(1)} pts\`\n\n` +
-          `**Elegibilidad Industry Mock (Req: 80%):** ${elegible ? '✅ **ELEGIBLE**' : '⏳ **EN PROGRESO**'}`
+          `**Rango actual:** ${currentRank.badge} **${currentRank.name}**\n` +
+          `**XP Total Acumulada:** \`${puntajeTotal.toFixed(1)} XP\`\n\n` +
+          `**Elegibilidad Industry Mock (Req: 80%):** ${elegible ? '✅ **ELEGIBLE**' : '⏳ **EN PROGRESO**'}\n\n` +
+          proximoRangoTexto
         )
         .addFields(
+          {
+            name: '📚 Actividades completadas',
+            value: `Prácticas: **${practicasCompletadas}/${sesionesPractica.length}**\n` +
+              `Integradores: **${integradoresCompletados}/${sesionesIntegradores.length}**\n` +
+              `Mock Interviews: **${mocksCompletados}/${sesionesMock.length}**`,
+            inline: false
+          },
           {
             name: '💻 Track CPC',
             value: `Asistencia: **${asistidasCPC}/${sesionesCPC.length}** (\`${pctCPC}%\`)`,
@@ -494,13 +588,21 @@ client.on('interactionCreate', async (interaction) => {
             inline: true
           }
         )
-        .setFooter({ text: 'Tracker' })
+        .setFooter({ text: 'CPC Ranking System' })
         .setTimestamp();
 
       if (feedbacksRecientes.length > 0) {
         embed.addFields({
-          name: '💬 Último Feedback de Mentores',
-          value: feedbacksRecientes.slice(-3).map(f => `• ${f}`).join('\n'),
+          name: '💬 Último Feedback Recibido',
+          value: feedbacksRecientes.slice(-2).map(f => `• ${f}`).join('\n'),
+          inline: false
+        });
+      }
+
+      if (badgesGanados.length > 0) {
+        embed.addFields({
+          name: '🏅 Badges de culminación',
+          value: badgesGanados.map(badge => `${badge.badge} **${badge.name}**: ${badge.desc}`).join('\n'),
           inline: false
         });
       }
@@ -513,68 +615,197 @@ client.on('interactionCreate', async (interaction) => {
     }
   }
 
-  // 5. /leaderboard
+  // 5. /leaderboard (Sistema de Rangos Unificado)
   if (commandName === 'leaderboard') {
-    await interaction.deferReply();
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-    const filtroPrograma = options.getString('programa') || 'GENERAL';
+    const filtroRango = options.getString('rango'); // null o 'Master', 'Solver', etc.
 
     try {
-      let queryEstudiantes = supabase
+      const { data: cicloActivo, error: errCiclo } = await getActiveCycle();
+      if (errCiclo || !cicloActivo) {
+        return interaction.editReply('❌ No hay un ciclo académico activo configurado.');
+      }
+
+      // Consulta directa sin importar el track
+      const { data: estudiantes, error: errEst } = await supabase
         .from('estudiantes')
-        .select('id, nombre, codeforces_handle, inscrito_cpc, inscrito_hub')
+        .select('id, nombre, codeforces_handle')
         .eq('status', 'ACTIVO');
 
-      if (filtroPrograma === 'CPC') queryEstudiantes = queryEstudiantes.eq('inscrito_cpc', true);
-      if (filtroPrograma === 'HUB') queryEstudiantes = queryEstudiantes.eq('inscrito_hub', true);
+      const { data: sesionesCiclo, error: errSesiones } = await supabase
+        .from('sesiones')
+        .select('id')
+        .eq('ciclo_id', cicloActivo.id);
 
-      const { data: estudiantes, error: errEst } = await queryEstudiantes;
-      const { data: registros, error: errReg } = await supabase
-        .from('registro_sesion')
-        .select('estudiante_id, puntaje_actividad, asistencia');
+      const sessionIds = (sesionesCiclo || []).map(sesion => sesion.id);
+      const { data: registros, error: errReg } = sessionIds.length > 0
+        ? await supabase
+          .from('registro_sesion')
+          .select('estudiante_id, puntaje_actividad, asistencia')
+          .in('sesion_id', sessionIds)
+        : { data: [], error: null };
 
-      if (errEst || errReg) {
+      if (errEst || errSesiones || errReg) {
         return interaction.editReply('❌ Error al consultar los datos del ranking.');
       }
 
+      // Mapear puntos por estudiante
       const statsPorEstudiante = new Map();
-
       estudiantes.forEach(est => {
         statsPorEstudiante.set(est.id, {
+          id: est.id,
           nombre: est.nombre,
           handle: est.codeforces_handle || null,
-          puntos: 0,
-          asistencias: 0
+          puntos: 0
         });
       });
 
       registros.forEach(r => {
         if (statsPorEstudiante.has(r.estudiante_id)) {
           const actual = statsPorEstudiante.get(r.estudiante_id);
-          if (r.puntaje_actividad) actual.puntos += parseFloat(r.puntaje_actividad);
-          if (r.asistencia === 'PRESENTE' || r.asistencia === 'JUSTIFICADO') actual.asistencias += 1;
+          const pts = parseFloat(r.puntaje_actividad);
+          if (!isNaN(pts) && pts > 0) actual.puntos += pts;
         }
       });
 
-      const ranking = Array.from(statsPorEstudiante.values())
-        .sort((a, b) => b.puntos - a.puntos || b.asistencias - a.asistencias)
-        .slice(0, 10);
+      // Solo estudiantes con al menos 1 XP
+      const listaEstudiantes = Array.from(statsPorEstudiante.values())
+        .filter(est => est.puntos > 0);
 
-      const medallas = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
+      const rangosAgrupados = groupStudentsByRank(listaEstudiantes);
 
-      const lista = ranking.map((item, index) => {
-        const handleStr = item.handle ? `(\`@${item.handle}\`)` : '';
-        return `${medallas[index]} **${item.nombre}** ${handleStr}\n┗ 🏆 **${item.puntos.toFixed(1)} pts** • 📅 ${item.asistencias} asistencias`;
-      }).join('\n\n');
+      // CASO A: Filtrar por un rango específico (ej: /leaderboard rango:Solver)
+      if (filtroRango) {
+        const rankConfig = RANKS.find(r => r.name.toLowerCase() === filtroRango.toLowerCase());
+        const estudiantesEnRango = rangosAgrupados[rankConfig.name] || [];
+        const pageSize = 10;
+        const totalPages = Math.max(1, Math.ceil(estudiantesEnRango.length / pageSize));
+        const rankColors = {
+          Master: 0xF1C40F,
+          Competitor: 0xE74C3C,
+          Challenger: 0xE67E22,
+          Solver: 0x9B59B6,
+          Explorer: 0x3498DB,
+          Rookie: 0x2ECC71
+        };
 
-      const embed = new EmbedBuilder()
-        .setTitle(`🏆 Leaderboard Oficial - Track ${filtroPrograma}`)
+        const renderRankPage = page => {
+          const safePage = Math.max(1, Math.min(page, totalPages));
+          const start = (safePage - 1) * pageSize;
+          const pageItems = estudiantesEnRango.slice(start, start + pageSize);
+          const minVisible = rankConfig.name === 'Rookie' ? 1 : rankConfig.minXP;
+          const embed = new EmbedBuilder()
+            .setTitle(`${rankConfig.badge} Rango ${rankConfig.name.toUpperCase()}`)
+            .setColor(rankColors[rankConfig.name])
+            .setDescription(
+              `**Umbral:** \`${minVisible} - ${rankConfig.maxXP} XP\`\n` +
+              `**Estudiantes clasificados:** \`${estudiantesEnRango.length}\`\n` +
+              `**Página:** \`${safePage}/${totalPages}\`\n` +
+              '━━━━━━━━━━━━━━━━━━━━━━━━━'
+            )
+            .setFooter({ text: 'CPC Ranking System' })
+            .setTimestamp();
+
+          embed.addFields({
+            name: '🏆 Clasificación',
+            value: pageItems.length > 0
+              ? pageItems.map(item => {
+                const handleStr = item.handle ? `(\`@${item.handle}\`)` : '';
+                return `\`#${item.position}\` **${item.nombre}** ${handleStr} ➔ **${item.puntos.toFixed(1)} XP**`;
+              }).join('\n')
+              : '_No hay estudiantes con puntaje registrado en este rango aún._',
+            inline: false
+          });
+
+          return { embed, safePage };
+        };
+
+        const renderControls = page => new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`leaderboard_page:${rankConfig.name}:prev:${page}`)
+            .setLabel('Anterior')
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(page <= 1),
+          new ButtonBuilder()
+            .setCustomId(`leaderboard_page:${rankConfig.name}:next:${page}`)
+            .setLabel('Siguiente')
+            .setStyle(ButtonStyle.Primary)
+            .setDisabled(page >= totalPages)
+        );
+
+        const firstPage = renderRankPage(1);
+        const response = await interaction.editReply({
+          embeds: [firstPage.embed],
+          components: [renderControls(firstPage.safePage)]
+        });
+
+        const collector = response.createMessageComponentCollector({ time: 10 * 60 * 1000 });
+        collector.on('collect', async buttonInteraction => {
+          if (buttonInteraction.user.id !== interaction.user.id) {
+            return buttonInteraction.reply({
+              content: '❌ Esta paginación pertenece a otro usuario.',
+              flags: MessageFlags.Ephemeral
+            });
+          }
+
+          const [, , direction, currentPageText] = buttonInteraction.customId.split(':');
+          const currentPage = Number.parseInt(currentPageText, 10);
+          const nextPage = direction === 'next' ? currentPage + 1 : currentPage - 1;
+          const page = renderRankPage(nextPage);
+
+          return buttonInteraction.update({
+            embeds: [page.embed],
+            components: [renderControls(page.safePage)]
+          });
+        });
+
+        collector.on('end', () => {
+          interaction.editReply({ components: [] }).catch(() => null);
+        });
+
+        return response;
+      }
+
+      // CASO B: Vista Global por Rangos (Default)
+      const embedGlobal = new EmbedBuilder()
+        .setTitle('🏆 CPC LEADERBOARD OFICIAL')
         .setColor(0xF1C40F)
-        .setDescription(ranking.length > 0 ? lista : '_No hay actividad registrada en este track aún._')
-        .setFooter({ text: 'Leaderboard • Top 10' })
+        .setDescription(
+          `**Sistema de Clasificación por Rangos**\n` +
+          `Estudiantes activos en la tabla: \`${listaEstudiantes.length}\`\n\n` +
+          `Usa \`/leaderboard rango:<Rango>\` para ver el detalle de un nivel.\n` +
+          `━━━━━━━━━━━━━━━━━━━━━━━━━`
+        )
+        .setFooter({ text: 'CPC Ranking System' })
         .setTimestamp();
 
-      return interaction.editReply({ embeds: [embed] });
+      const ordenRangos = ['Master', 'Competitor', 'Challenger', 'Solver', 'Explorer', 'Rookie'];
+
+      ordenRangos.forEach(rName => {
+        const rConf = RANKS.find(r => r.name === rName);
+        const grupo = rangosAgrupados[rName] || [];
+        const minVisible = rName === 'Rookie' ? 1 : rConf.minXP;
+
+        let valorCampo = `_0 estudiantes en este rango_`;
+
+        if (grupo.length > 0) {
+          const topList = grupo.slice(0, 3).map(
+            s => `\`#${s.position}\` **${s.nombre}** ➔ \`${s.puntos.toFixed(1)} XP\``
+          ).join('\n');
+
+          const restantes = grupo.length - 3;
+          valorCampo = `${topList}${restantes > 0 ? `\n_...y ${restantes} más (usa /leaderboard rango:${rName})_` : ''}`;
+        }
+
+        embedGlobal.addFields({
+          name: `${rConf.badge} ${rName.toUpperCase()} (${grupo.length}) • [${minVisible} - ${rConf.maxXP} XP]`,
+          value: valorCampo,
+          inline: false
+        });
+      });
+
+      return interaction.editReply({ embeds: [embedGlobal] });
 
     } catch (err) {
       console.error('Error en /leaderboard:', err);
@@ -582,7 +813,7 @@ client.on('interactionCreate', async (interaction) => {
     }
   }
 
-  // 6. /calificar-mock
+ // 6. /calificar-mock
   if (commandName === 'calificar-mock') {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
@@ -612,14 +843,23 @@ client.on('interactionCreate', async (interaction) => {
         return interaction.editReply(`❌ No se encontró la sesión con ID \`${sesionId}\`.`);
       }
 
-      const { data: regPrevio } = await supabase
+      const { data: registrosPrevios } = await supabase
         .from('registro_sesion')
-        .select('asistencia')
-        .eq('sesion_id', sesion.id)
-        .eq('estudiante_id', estudiante.id)
-        .maybeSingle();
+        .select('sesion_id, puntaje_actividad, asistencia')
+        .eq('estudiante_id', estudiante.id);
 
-      const estadoAsistencia = regPrevio?.asistencia || 'PRESENTE';
+      let xpPrevio = 0;
+      let puntajeSesionAnterior = 0;
+      let estadoAsistencia = 'PRESENTE';
+
+      (registrosPrevios || []).forEach(r => {
+        const pts = parseFloat(r.puntaje_actividad) || 0;
+        xpPrevio += pts;
+        if (r.sesion_id === sesion.id) {
+          puntajeSesionAnterior = pts;
+          if (r.asistencia) estadoAsistencia = r.asistencia;
+        }
+      });
 
       const { error: upsertError } = await supabase
         .from('registro_sesion')
@@ -639,6 +879,9 @@ client.on('interactionCreate', async (interaction) => {
         return interaction.editReply(`❌ Error al guardar la calificación: ${upsertError.message}`);
       }
 
+      const xpNuevo = xpPrevio - puntajeSesionAnterior + puntaje;
+      const nuevoRango = checkLevelUp(xpPrevio, xpNuevo);
+
       const embed = new EmbedBuilder()
         .setTitle('✅ Mock Interview Calificada')
         .setColor(0x00A86B)
@@ -647,10 +890,19 @@ client.on('interactionCreate', async (interaction) => {
           { name: '👤 Estudiante', value: `${estudiante.nombre} (\`${estudiante.correo}\`)`, inline: false },
           { name: '🎯 Sesión', value: `${sesion.nombre}`, inline: true },
           { name: '⭐ Puntaje', value: `\`${puntaje.toFixed(1)} / 100\``, inline: true },
+          { name: '📈 XP Total', value: `\`${xpNuevo.toFixed(1)} XP\``, inline: true },
           { name: '📝 Feedback', value: `${feedback}`, inline: false }
         )
         .setFooter({ text: 'HUB Mock Interview Tracker' })
         .setTimestamp();
+
+      if (nuevoRango) {
+        embed.addFields({
+          name: '🎉 ¡NUEVO RANGO ALCANZADO!',
+          value: `${nuevoRango.badge} **${estudiante.nombre}** ascendió al rango **${nuevoRango.name.toUpperCase()}**!`,
+          inline: false
+        });
+      }
 
       return interaction.editReply({ embeds: [embed] });
 
@@ -690,14 +942,24 @@ client.on('interactionCreate', async (interaction) => {
         return interaction.editReply(`❌ No se encontró la sesión con ID \`${sesionId}\`.`);
       }
 
-      const { data: regPrevio } = await supabase
+      // Consultar registros previos del estudiante para calcular XP antes y después
+      const { data: registrosPrevios } = await supabase
         .from('registro_sesion')
-        .select('asistencia')
-        .eq('sesion_id', sesion.id)
-        .eq('estudiante_id', estudiante.id)
-        .maybeSingle();
+        .select('sesion_id, puntaje_actividad, asistencia')
+        .eq('estudiante_id', estudiante.id);
 
-      const estadoAsistencia = regPrevio?.asistencia || 'PRESENTE';
+      let xpPrevio = 0;
+      let puntajeSesionAnterior = 0;
+      let estadoAsistencia = 'PRESENTE';
+
+      (registrosPrevios || []).forEach(r => {
+        const pts = parseFloat(r.puntaje_actividad) || 0;
+        xpPrevio += pts;
+        if (r.sesion_id === sesion.id) {
+          puntajeSesionAnterior = pts;
+          if (r.asistencia) estadoAsistencia = r.asistencia;
+        }
+      });
 
       const { error: upsertError } = await supabase
         .from('registro_sesion')
@@ -717,13 +979,23 @@ client.on('interactionCreate', async (interaction) => {
         return interaction.editReply(`❌ Error al guardar el puntaje: ${upsertError.message}`);
       }
 
-      return interaction.editReply(
+      // Calcular nuevo XP total y verificar si subió de rango
+      const xpNuevo = xpPrevio - puntajeSesionAnterior + puntaje;
+      const nuevoRango = checkLevelUp(xpPrevio, xpNuevo);
+
+      let respuesta =
         `✅ **Puntaje de Concurso Registrado**\n` +
         `• **Estudiante:** ${estudiante.nombre} (\`${estudiante.correo}\`)\n` +
         `• **Sesión:** ${sesion.nombre}\n` +
-        `• **Puntaje:** \`${puntaje.toFixed(1)} pts\`\n` +
-        (feedback ? `• **Feedback:** ${feedback}` : '')
-      );
+        `• **Puntaje de sesión:** \`${puntaje.toFixed(1)} pts\`\n` +
+        `• **XP Total:** \`${xpNuevo.toFixed(1)} XP\`\n` +
+        (feedback ? `• **Feedback:** ${feedback}\n` : '');
+
+      if (nuevoRango) {
+        respuesta += `\n🎉 **¡NUEVO RANGO ALCANZADO!**\n${nuevoRango.badge} **${estudiante.nombre}** ascendió a **${nuevoRango.name.toUpperCase()}** (${xpNuevo.toFixed(1)} XP).`;
+      }
+
+      return interaction.editReply(respuesta);
 
     } catch (err) {
       console.error('Error en /calificar-concurso:', err);
