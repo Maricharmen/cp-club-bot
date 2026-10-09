@@ -5,6 +5,19 @@ const { ChannelType, EmbedBuilder, PermissionFlagsBits, Routes } = require('disc
 const DATA_DIRECTORY = path.join(__dirname, '..', '..', 'data');
 const DATA_FILE = path.join(DATA_DIRECTORY, 'voice-channels.json');
 let discordClient;
+
+async function replyToInteraction(interaction, response) {
+  if (interaction.replied || interaction.deferred) {
+    return interaction.followUp(response).catch(error => {
+      console.error('Error enviando respuesta adicional:', error);
+    });
+  }
+
+  return interaction.reply(response).catch(error => {
+    console.error('Error respondiendo la interacción:', error);
+  });
+}
+
 function readStore() {
   try {
     const store = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
@@ -133,11 +146,15 @@ async function cleanStoredChannels(client) {
 
   for (const hub of store.hubs) {
     const channel = await client.channels.fetch(hub.channelId).catch(() => null);
-    if (isVoiceChannel(channel)) remainingHubs.push(hub);
+    if (!channel || isVoiceChannel(channel)) remainingHubs.push(hub);
   }
 
   for (const channelId of store.dynamicChannels) {
     const channel = await client.channels.fetch(channelId).catch(() => null);
+    if (!channel) {
+      remainingDynamicChannels.push(channelId);
+      continue;
+    }
     if (!isVoiceChannel(channel)) continue;
 
     if (channel.members.size === 0) {
@@ -263,7 +280,7 @@ async function handleCommand(interaction) {
       return await createVoiceHub(interaction);
     } catch (error) {
       console.error('Error creando canal principal de voz:', error);
-      return interaction.reply({ content: '❌ No se pudo crear el canal principal de voz.', ephemeral: true });
+      return replyToInteraction(interaction, { content: '❌ No se pudo crear el canal principal de voz.', ephemeral: true });
     }
   }
 
@@ -272,7 +289,7 @@ async function handleCommand(interaction) {
       return await configureVoiceChannel(interaction);
     } catch (error) {
       console.error('Error configurando canal de voz:', error);
-      return interaction.reply({ content: '❌ No se pudo actualizar tu canal de voz.', ephemeral: true });
+      return replyToInteraction(interaction, { content: '❌ No se pudo actualizar tu canal de voz.', ephemeral: true });
     }
   }
 
@@ -281,7 +298,7 @@ async function handleCommand(interaction) {
       return await configureLogChannel(interaction);
     } catch (error) {
       console.error('Error configurando logs de voz:', error);
-      return interaction.reply({ content: '❌ No se pudo configurar el canal de logs.', ephemeral: true });
+      return replyToInteraction(interaction, { content: '❌ No se pudo configurar el canal de logs.', ephemeral: true });
     }
   }
 
@@ -290,13 +307,18 @@ async function handleCommand(interaction) {
 
 async function handleVoiceStateUpdate(oldState, newState) {
   const store = readStore();
+  const oldChannelId = oldState.channelId;
+  const newChannelId = newState.channelId;
+  const channelChanged = oldChannelId !== newChannelId;
+  if (!channelChanged) return;
+
   const joinedHub = newState.channel && getHubIds(newState.guild.id).includes(newState.channel.id);
 
   if (
     newState.channel &&
-    store.dynamicChannels.includes(newState.channel.id) &&
+    store.dynamicChannels.includes(newChannelId) &&
     !newState.member.user.bot &&
-    oldState.channel?.id !== newState.channel.id
+    oldChannelId !== newChannelId
   ) {
     await sendVoiceLog(
       newState.guild.id,
@@ -350,7 +372,7 @@ async function handleVoiceStateUpdate(oldState, newState) {
   }
 
   const oldChannel = oldState.channel;
-  if (isVoiceChannel(oldChannel) && store.dynamicChannels.includes(oldChannel.id) && oldChannel.members.size === 0) {
+  if (oldChannelId && oldChannelId !== newChannelId && isVoiceChannel(oldChannel) && store.dynamicChannels.includes(oldChannelId) && oldChannel.members.size === 0) {
     await sendVoiceLog(
       oldState.guild.id,
       'Canal dinámico cerrado',
@@ -359,11 +381,11 @@ async function handleVoiceStateUpdate(oldState, newState) {
     );
     await oldChannel.delete('Canal de voz dinámico vacío').catch(() => null);
     updateStore(store => {
-      store.dynamicChannels = store.dynamicChannels.filter(channelId => channelId !== oldChannel.id);
+      store.dynamicChannels = store.dynamicChannels.filter(channelId => channelId !== oldChannelId);
     });
   }
 
-  if (isVoiceChannel(oldChannel) && store.dynamicChannels.includes(oldChannel.id) && oldChannel.members.size > 0) {
+  if (oldChannelId && oldChannelId !== newChannelId && isVoiceChannel(oldChannel) && store.dynamicChannels.includes(oldChannelId) && oldChannel.members.size > 0) {
     await sendVoiceLog(
       oldState.guild.id,
       'Usuario salió de voz',

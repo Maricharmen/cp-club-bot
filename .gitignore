@@ -4,3 +4,4 @@ node_modules/
 *.log
 *.key
 .ssh/
+data/voice-channels.json
