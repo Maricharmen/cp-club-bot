@@ -1,40 +1,23 @@
-const fs = require('node:fs');
 const path = require('node:path');
-const { EmbedBuilder, MessageFlags } = require('discord.js');
+const { EmbedBuilder, Events, MessageFlags } = require('discord.js');
+const config = require('../config');
+const { createJsonStore } = require('../storage/jsonStore');
 
-const DATA_DIRECTORY = path.join(__dirname, '..', '..', 'data');
-const DATA_FILE = path.join(DATA_DIRECTORY, 'birthdays.json');
-const TIME_ZONE = process.env.BIRTHDAY_TIMEZONE || 'America/Merida';
-let discordClient;
-
-function readStore() {
-  try {
-    const store = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+const TIME_ZONE = config.birthdayTimeZone;
+const CHECK_INTERVAL_MS = 60_000;
+const birthdayStore = createJsonStore(path.join(config.dataDirectory, 'birthdays.json'), {
+  createDefault: () => ({ channels: [], birthdays: [], notifications: { monthly: {}, daily: {} } }),
+  normalize: store => {
     store.channels ||= [];
     store.birthdays ||= [];
     store.notifications ||= { monthly: {}, daily: {} };
     store.notifications.monthly ||= {};
     store.notifications.daily ||= {};
     return store;
-  } catch (error) {
-    if (error.code === 'ENOENT') {
-      return { channels: [], birthdays: [], notifications: { monthly: {}, daily: {} } };
-    }
-    throw error;
   }
-}
-
-function writeStore(store) {
-  fs.mkdirSync(DATA_DIRECTORY, { recursive: true });
-  fs.writeFileSync(DATA_FILE, `${JSON.stringify(store, null, 2)}\n`);
-}
-
-function updateStore(update) {
-  const store = readStore();
-  update(store);
-  writeStore(store);
-  return store;
-}
+});
+const { read: readStore, write: writeStore, update: updateStore } = birthdayStore;
+let discordClient;
 
 function getDateParts(date = new Date()) {
   const parts = new Intl.DateTimeFormat('en-US', {
@@ -96,7 +79,7 @@ async function sendMonthlyReminder(channel, birthdays, month) {
   });
 }
 
-async function sendDailyReminder(guild, channel, birthdays) {
+async function sendDailyReminder(channel, birthdays) {
   const userIds = birthdays.map(birthday => birthday.userId);
   await channel.send({
     embeds: [new EmbedBuilder()
@@ -145,7 +128,7 @@ async function processGuildBirthdays(configuredChannel, store, month, day, month
   const todayBirthdays = monthBirthdays.filter(birthday => birthday.day === day);
   if (todayBirthdays.length > 0 && store.notifications.daily[guild.id] !== dayKey) {
     try {
-      await sendDailyReminder(guild, channel, todayBirthdays);
+      await sendDailyReminder(channel, todayBirthdays);
       store.notifications.daily[guild.id] = dayKey;
       changed = true;
     } catch (error) {
@@ -210,12 +193,12 @@ async function handleCommand(interaction) {
 
 function setupBirthdays(client) {
   discordClient = client;
-  client.once('ready', () => processBirthdays().catch(error => {
+  client.once(Events.ClientReady, () => processBirthdays().catch(error => {
     console.error('Error procesando recordatorios iniciales de cumpleaños:', error);
   }));
   setInterval(() => processBirthdays().catch(error => {
     console.error('Error procesando recordatorios de cumpleaños:', error);
-  }), 60_000).unref();
+  }), CHECK_INTERVAL_MS).unref();
 }
 
 module.exports = { handleCommand, setupBirthdays };

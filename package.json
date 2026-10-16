@@ -1,11 +1,15 @@
 {
   "name": "cp-club-bot",
   "version": "1.0.0",
-  "description": "",
+  "description": "Bot de Discord del CP Club: asistencia, rangos por XP, Codeforces, equipos, cumpleaños y canales de voz dinámicos.",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "deploy-commands": "node deploy-commands.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=22"
   },
   "keywords": [],
   "author": "",

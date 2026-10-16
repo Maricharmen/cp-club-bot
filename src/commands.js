@@ -112,7 +112,7 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName('crear-equipo')
-    .setDescription('Crea un equipo de hasta 3 personas con nombre y color personalizados'),
+    .setDescription('Crea un equipo de hasta 4 personas con nombre y color personalizados'),
 
   new SlashCommandBuilder()
     .setName('gestionar-equipo')

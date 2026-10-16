@@ -1,4 +1,4 @@
-const supabase = require('./supabase');
+const { supabase } = require('./supabase');
 
 async function getActiveCycle() {
   return supabase
@@ -8,4 +8,11 @@ async function getActiveCycle() {
     .maybeSingle();
 }
 
-module.exports = { getActiveCycle };
+async function getCycleSessions(cycleId, columns = 'id') {
+  return supabase
+    .from('sesiones')
+    .select(columns)
+    .eq('ciclo_id', cycleId);
+}
+
+module.exports = { getActiveCycle, getCycleSessions };

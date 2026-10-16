@@ -17,7 +17,7 @@ const pages = [
       ['/vincular', 'Vincula tu cuenta de Discord con tu correo y handle de Codeforces.'],
       ['/asistencia', 'Registra tu asistencia con el código de la sesión activa.'],
       ['/mi-progreso', 'Consulta tu asistencia, puntos y feedback acumulado.'],
-      ['/leaderboard', 'Muestra el ranking general o filtrado por programa.'],
+      ['/leaderboard', 'Muestra el ranking general o filtrado por rango.'],
       ['/configurar-mi-canal-voz', 'Cambia el nombre o límite de tu canal de voz personal.']
     ]
   },

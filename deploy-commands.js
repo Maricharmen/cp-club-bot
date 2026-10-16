@@ -1,14 +1,15 @@
-require('./src/config');
+const config = require('./src/config');
 const { REST, Routes } = require('discord.js');
 const commands = require('./src/commands');
 
-const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
-
 (async () => {
   try {
+    config.validateConfig();
+    const rest = new REST({ version: '10' }).setToken(config.discordToken);
+
     console.log(`[Deploy] Registrando ${commands.length} Slash Commands...`);
     await rest.put(
-      Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
+      Routes.applicationGuildCommands(config.clientId, config.guildId),
       { body: commands }
     );
     console.log('Slash Commands actualizados exitosamente en Discord.');

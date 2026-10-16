@@ -1,4 +1,3 @@
-const fs = require('node:fs');
 const path = require('node:path');
 const {
   ActionRowBuilder,
@@ -12,32 +11,27 @@ const {
   MessageFlags,
   PermissionFlagsBits
 } = require('discord.js');
+const config = require('../config');
+const { createJsonStore } = require('../storage/jsonStore');
 
-const DATA_DIRECTORY = path.join(__dirname, '..', '..', 'data');
-const DATA_FILE = path.join(DATA_DIRECTORY, 'team-roles.json');
-const pendingTeams = new Map();
-
-function readStore() {
-  try {
-    const store = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+const MAX_TEAM_SIZE = 4;
+const teamStore = createJsonStore(path.join(config.dataDirectory, 'team-roles.json'), {
+  createDefault: () => ({ teams: [] }),
+  normalize: store => {
     store.teams ||= [];
     return store;
-  } catch (error) {
-    if (error.code === 'ENOENT') return { teams: [] };
-    throw error;
   }
-}
+});
+const readStore = teamStore.read;
+const updateStore = teamStore.update;
+const pendingTeams = new Map();
 
-function writeStore(store) {
-  fs.mkdirSync(DATA_DIRECTORY, { recursive: true });
-  fs.writeFileSync(DATA_FILE, `${JSON.stringify(store, null, 2)}\n`);
-}
-
-function updateStore(update) {
-  const store = readStore();
-  update(store);
-  writeStore(store);
-  return store;
+// role.members solo refleja la caché; se cargan los miembros del servidor
+// para no tratar como vacío un equipo cuyos miembros no están cacheados.
+async function fetchGuildMembers(guild) {
+  await guild.members.fetch().catch(error => {
+    console.error('No se pudieron cargar los miembros del servidor:', error);
+  });
 }
 
 function getTeam(guildId, ownerId) {
@@ -68,7 +62,7 @@ function teamEmbed(role, ownerId, memberIds) {
     .setTitle(`Equipo ${role.name}`)
     .setColor(role.color || 0x5865F2)
     .setDescription(`Propietario: <@${ownerId}>\nMiembros actuales: ${members || 'ninguno'}`)
-    .setFooter({ text: 'Máximo 4 personas contando al creador' });
+    .setFooter({ text: `Máximo ${MAX_TEAM_SIZE} personas contando al creador` });
 }
 
 function selectionComponents(customId) {
@@ -76,9 +70,9 @@ function selectionComponents(customId) {
     new ActionRowBuilder().addComponents(
       new UserSelectMenuBuilder()
         .setCustomId(customId)
-        .setPlaceholder('Selecciona hasta 3 compañeros')
+        .setPlaceholder(`Selecciona hasta ${MAX_TEAM_SIZE - 1} compañeros`)
         .setMinValues(0)
-        .setMaxValues(3)
+        .setMaxValues(MAX_TEAM_SIZE - 1)
     ),
     new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -144,6 +138,8 @@ async function handleManageCommand(interaction) {
     return interaction.reply({ content: '❌ El rol de tu equipo ya no existe. Puedes crear un equipo nuevo.', flags: MessageFlags.Ephemeral });
   }
 
+  await fetchGuildMembers(interaction.guild);
+
   return showMemberPicker(
     interaction,
     {
@@ -151,6 +147,7 @@ async function handleManageCommand(interaction) {
       roleId: role.id,
       ownerId: interaction.user.id,
       role,
+      isNew: false,
       memberIds: [...role.members.keys()].filter(memberId => memberId !== interaction.user.id)
     },
     'Selecciona los compañeros que deben conservar el rol. El creador se conserva automáticamente.'
@@ -162,6 +159,8 @@ async function handleListCommand(interaction) {
   if (teams.length === 0) {
     return interaction.reply({ content: 'ℹ️ No hay equipos creados en este servidor.', flags: MessageFlags.Ephemeral });
   }
+
+  await fetchGuildMembers(interaction.guild);
 
   const embeds = [];
   const validTeams = [];
@@ -175,7 +174,7 @@ async function handleListCommand(interaction) {
       .setTitle(`Equipo ${role.name}`)
       .setColor(role.color || 0x5865F2)
       .setDescription(`**Rol:** ${role}\n**Propietario:** <@${team.ownerId}>\n**Miembros:** ${members}`)
-      .setFooter({ text: `${role.members.size}/4 integrantes` }));
+      .setFooter({ text: `${role.members.size}/${MAX_TEAM_SIZE} integrantes` }));
   }
 
   if (validTeams.length !== teams.length) {
@@ -305,7 +304,7 @@ async function handleModal(interaction) {
 
   return showMemberPicker(
     interaction,
-    { guildId: interaction.guild.id, roleId: role.id, ownerId: interaction.user.id, role, memberIds: [] },
+    { guildId: interaction.guild.id, roleId: role.id, ownerId: interaction.user.id, role, isNew: true, memberIds: [] },
     'Rol creado. Selecciona los compañeros y pulsa **Guardar miembros**.'
   );
 }
@@ -319,7 +318,7 @@ async function handleMemberSelect(interaction) {
     return interaction.update({ content: '❌ Esta configuración expiró. Ejecuta el comando de nuevo.', embeds: [], components: [] });
   }
 
-  state.memberIds = interaction.values.filter(memberId => memberId !== state.ownerId).slice(0, 3);
+  state.memberIds = interaction.values.filter(memberId => memberId !== state.ownerId).slice(0, MAX_TEAM_SIZE - 1);
   pendingTeams.set(key, state);
   return interaction.update({
     content: 'Revisa la lista y pulsa **Guardar miembros** para aplicar los cambios.',
@@ -336,8 +335,12 @@ async function handleButton(interaction) {
 
   pendingTeams.delete(key);
   if (interaction.customId === 'team_cancel') {
-    updateStore(store => { store.teams = store.teams.filter(team => team.roleId !== state.roleId); });
-    await state.role.delete('Registro de equipo cancelado').catch(() => null);
+    // Solo se descarta el rol si el equipo se acaba de crear; cancelar
+    // /gestionar-equipo no debe eliminar un equipo existente.
+    if (state.isNew) {
+      updateStore(store => { store.teams = store.teams.filter(team => team.roleId !== state.roleId); });
+      await state.role.delete('Registro de equipo cancelado').catch(() => null);
+    }
     return interaction.update({ content: 'Operación cancelada.', embeds: [], components: [] });
   }
 
@@ -350,14 +353,20 @@ async function handleButton(interaction) {
   }
   for (const memberId of desired) await addMemberToRole(interaction.guild, role, memberId).catch(() => null);
   return interaction.update({
-    content: `✅ Equipo actualizado. ${role} tiene ${desired.size}/4 integrantes.`,
+    content: `✅ Equipo actualizado. ${role} tiene ${desired.size}/${MAX_TEAM_SIZE} integrantes.`,
     embeds: [teamEmbed(role, state.ownerId, [...desired])],
     components: []
   });
 }
 
+// Solo revisa los equipos del miembro que salió, y con la lista completa de
+// miembros cargada, para no borrar equipos que solo parecían vacíos en caché.
 async function handleMemberRemove(member) {
-  const teams = readStore().teams.filter(team => team.guildId === member.guild.id);
+  const teams = readStore().teams.filter(team =>
+    team.guildId === member.guild.id && member.roles.cache.has(team.roleId));
+  if (teams.length === 0) return;
+
+  await member.guild.members.fetch();
   for (const team of teams) {
     const role = member.guild.roles.cache.get(team.roleId);
     if (role?.members.size === 0) {

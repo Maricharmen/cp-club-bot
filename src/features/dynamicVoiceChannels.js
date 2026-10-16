@@ -1,9 +1,18 @@
-const fs = require('node:fs');
 const path = require('node:path');
-const { ChannelType, EmbedBuilder, PermissionFlagsBits, Routes } = require('discord.js');
+const { ChannelType, EmbedBuilder, Events, MessageFlags, PermissionFlagsBits, Routes } = require('discord.js');
+const config = require('../config');
+const { createJsonStore } = require('../storage/jsonStore');
 
-const DATA_DIRECTORY = path.join(__dirname, '..', '..', 'data');
-const DATA_FILE = path.join(DATA_DIRECTORY, 'voice-channels.json');
+const voiceStore = createJsonStore(path.join(config.dataDirectory, 'voice-channels.json'), {
+  createDefault: () => ({ hubs: [], dynamicChannels: [], logChannels: [] }),
+  normalize: store => {
+    store.hubs ||= [];
+    store.dynamicChannels ||= [];
+    store.logChannels ||= [];
+    return store;
+  }
+});
+const { read: readStore, write: writeStore, update: updateStore } = voiceStore;
 let discordClient;
 
 async function replyToInteraction(interaction, response) {
@@ -16,31 +25,6 @@ async function replyToInteraction(interaction, response) {
   return interaction.reply(response).catch(error => {
     console.error('Error respondiendo la interacción:', error);
   });
-}
-
-function readStore() {
-  try {
-    const store = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
-    store.hubs ||= [];
-    store.dynamicChannels ||= [];
-    store.logChannels ||= [];
-    return store;
-  } catch (error) {
-    if (error.code === 'ENOENT') return { hubs: [], dynamicChannels: [], logChannels: [] };
-    throw error;
-  }
-}
-
-function writeStore(store) {
-  fs.mkdirSync(DATA_DIRECTORY, { recursive: true });
-  fs.writeFileSync(DATA_FILE, `${JSON.stringify(store, null, 2)}\n`);
-}
-
-function updateStore(update) {
-  const store = readStore();
-  update(store);
-  writeStore(store);
-  return store;
 }
 
 function isVoiceChannel(channel) {
@@ -185,7 +169,7 @@ async function createVoiceHub(interaction) {
   if (!isCategory(category)) {
     return interaction.reply({
       content: '❌ El `categoria_id` no corresponde a una categoría válida de este servidor.',
-      ephemeral: true
+      flags: MessageFlags.Ephemeral
     });
   }
 
@@ -210,7 +194,7 @@ async function createVoiceHub(interaction) {
 
   return interaction.reply({
     content: `✅ Canal principal creado: <#${channel.id}>\nCuando alguien se una, se creará automáticamente su canal privado de voz.`,
-    ephemeral: true
+    flags: MessageFlags.Ephemeral
   });
 }
 
@@ -224,7 +208,7 @@ async function configureLogChannel(interaction) {
 
   await interaction.reply({
     content: `✅ Los logs de voz se enviarán a <#${channel.id}>.`,
-    ephemeral: true
+    flags: MessageFlags.Ephemeral
   });
 
   await sendVoiceLog(
@@ -249,7 +233,7 @@ async function configureVoiceChannel(interaction) {
   if (!channel) {
     return interaction.reply({
       content: '❌ No tienes un canal de voz dinámico activo.',
-      ephemeral: true
+      flags: MessageFlags.Ephemeral
     });
   }
 
@@ -263,14 +247,14 @@ async function configureVoiceChannel(interaction) {
   if (Object.keys(changes).length === 0) {
     return interaction.reply({
       content: '❌ Debes indicar al menos un `nombre` o un `limite`.',
-      ephemeral: true
+      flags: MessageFlags.Ephemeral
     });
   }
 
   await channel.edit(changes);
   return interaction.reply({
     content: `✅ Canal actualizado: <#${channel.id}>`,
-    ephemeral: true
+    flags: MessageFlags.Ephemeral
   });
 }
 
@@ -280,7 +264,7 @@ async function handleCommand(interaction) {
       return await createVoiceHub(interaction);
     } catch (error) {
       console.error('Error creando canal principal de voz:', error);
-      return replyToInteraction(interaction, { content: '❌ No se pudo crear el canal principal de voz.', ephemeral: true });
+      return replyToInteraction(interaction, { content: '❌ No se pudo crear el canal principal de voz.', flags: MessageFlags.Ephemeral });
     }
   }
 
@@ -289,7 +273,7 @@ async function handleCommand(interaction) {
       return await configureVoiceChannel(interaction);
     } catch (error) {
       console.error('Error configurando canal de voz:', error);
-      return replyToInteraction(interaction, { content: '❌ No se pudo actualizar tu canal de voz.', ephemeral: true });
+      return replyToInteraction(interaction, { content: '❌ No se pudo actualizar tu canal de voz.', flags: MessageFlags.Ephemeral });
     }
   }
 
@@ -298,7 +282,7 @@ async function handleCommand(interaction) {
       return await configureLogChannel(interaction);
     } catch (error) {
       console.error('Error configurando logs de voz:', error);
-      return replyToInteraction(interaction, { content: '❌ No se pudo configurar el canal de logs.', ephemeral: true });
+      return replyToInteraction(interaction, { content: '❌ No se pudo configurar el canal de logs.', flags: MessageFlags.Ephemeral });
     }
   }
 
@@ -397,7 +381,7 @@ async function handleVoiceStateUpdate(oldState, newState) {
 
 function setupDynamicVoiceChannels(client) {
   discordClient = client;
-  client.once('ready', () => cleanStoredChannels(client).catch(error => {
+  client.once(Events.ClientReady, () => cleanStoredChannels(client).catch(error => {
     console.error('Error limpiando canales de voz almacenados:', error);
   }));
 

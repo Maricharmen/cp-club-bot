@@ -1,13 +1,20 @@
-// src/features/ranks.js
+// src/domain/ranks.js
 
 const RANKS = [
-  { name: 'Rookie', badge: '🌱', minXP: 0, maxXP: 399 },
-  { name: 'Explorer', badge: '🔵', minXP: 400, maxXP: 799 },
-  { name: 'Solver', badge: '🟣', minXP: 800, maxXP: 1199 },
-  { name: 'Challenger', badge: '🟠', minXP: 1200, maxXP: 1599 },
-  { name: 'Competitor', badge: '🔴', minXP: 1600, maxXP: 1999 },
-  { name: 'Master', badge: '👑', minXP: 2000, maxXP: 2200 }
+  { name: 'Rookie', badge: '🌱', minXP: 0, maxXP: 399, color: 0x2ECC71 },
+  { name: 'Explorer', badge: '🔵', minXP: 400, maxXP: 799, color: 0x3498DB },
+  { name: 'Solver', badge: '🟣', minXP: 800, maxXP: 1199, color: 0x9B59B6 },
+  { name: 'Challenger', badge: '🟠', minXP: 1200, maxXP: 1599, color: 0xE67E22 },
+  { name: 'Competitor', badge: '🔴', minXP: 1600, maxXP: 1999, color: 0xE74C3C },
+  { name: 'Master', badge: '👑', minXP: 2000, maxXP: 2200, color: 0xF1C40F }
 ];
+
+// Orden de presentación en el leaderboard: del rango más alto al más bajo.
+const RANKS_DESCENDING = [...RANKS].reverse();
+
+function findRankByName(name) {
+  return RANKS.find(rank => rank.name.toLowerCase() === String(name).toLowerCase()) || null;
+}
 
 function getRank(xp) {
   const puntos = Math.max(0, Number(xp) || 0);
@@ -76,14 +83,7 @@ function assignRankPositions(studentsList) {
 }
 
 function groupStudentsByRank(studentsWithPoints) {
-  const grouped = {
-    Master: [],
-    Competitor: [],
-    Challenger: [],
-    Solver: [],
-    Explorer: [],
-    Rookie: []
-  };
+  const grouped = Object.fromEntries(RANKS_DESCENDING.map(rank => [rank.name, []]));
 
   studentsWithPoints.forEach(student => {
     const rank = getRank(student.puntos);
@@ -131,6 +131,8 @@ function getEarnedBadges({ practicas, totalPracticas, integradores, totalIntegra
 
 module.exports = {
   RANKS,
+  RANKS_DESCENDING,
+  findRankByName,
   getRank,
   getNextRank,
   getRankProgress,

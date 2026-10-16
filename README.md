@@ -83,13 +83,13 @@ Para consultar todos los equipos del servidor, usa `/listar-equipos`. El propiet
 ## ⚙️ Arquitectura Técnica y Configuración
 
 ### Requisitos Previos
-* **Node.js** v18 o superior.
+* **Node.js** v22 o superior (la imagen de Docker usa Node 22).
 * Base de datos PostgreSQL en **Supabase**.
 * Aplicación y Bot configurados en el **Discord Developer Portal**.
 
 ### Variables de Entorno
 
-Crea un archivo `.env` en la raíz del proyecto, junto a `index.js`:
+Copia `.env.example` como `.env` en la raíz del proyecto y completa los valores:
 
 ```env
 DISCORD_TOKEN=token_del_bot
@@ -98,7 +98,11 @@ GUILD_ID=id_del_servidor
 SUPABASE_URL=https://tu-proyecto.supabase.co
 SUPABASE_KEY=tu-anon-public-key
 BIRTHDAY_TIMEZONE=America/Merida
+# Opcional: carpeta del estado local (por defecto ./data)
+DATA_DIR=./data-test
 ```
+
+Si falta alguna variable obligatoria, el bot se detiene al arrancar e indica cuál falta.
 
 Puedes obtener la URL y la key desde Supabase en `Project Settings > Data API`. Usa una base de datos de pruebas si no quieres modificar datos reales. Nunca publiques `.env` ni compartas sus valores.
 
@@ -124,15 +128,33 @@ Para `/crear-equipo`, el bot necesita el permiso `Manage Roles` y su rol debe es
 
    `npm install`
 
-2. Desplegar o actualizar los slash commands:
+2. Ejecutar las pruebas automatizadas (no se conectan a Discord ni a Supabase):
 
-   `node deploy-commands.js`
+   `npm test`
 
-3. Iniciar el bot:
+3. Desplegar o actualizar los slash commands:
 
-   `node index.js`
+   `npm run deploy-commands`
 
-La terminal debe permanecer abierta. Para probar cambios antes de subirlos a GitHub, usa un segundo bot de Discord y, preferiblemente, un servidor y proyecto de Supabase de pruebas. No conectes localmente el mismo token que ya está conectado en producción.
+4. Iniciar el bot:
+
+   `npm start`
+
+La terminal debe permanecer abierta. Para probar cambios antes de subirlos a GitHub, usa un segundo bot de Discord y, preferiblemente, un servidor y proyecto de Supabase de pruebas. No conectes localmente el mismo token que ya está conectado en producción: las dos instancias responderían a los mismos comandos.
+
+Al probar localmente, usa `DATA_DIR=./data-test` en `.env`. Así el bot de pruebas no lee los canales de cumpleaños y de logs de voz guardados en `data/`, que vienen de producción, ni los modifica.
+
+### Estructura del código
+
+* `index.js`: arranque del bot.
+* `src/interactions/`: router de interacciones y registro de handlers.
+* `src/features/`: un módulo por grupo de comandos.
+* `src/services/`: acceso a Supabase y a la API de Codeforces.
+* `src/domain/`: reglas de negocio puras (rangos, XP, standings).
+* `src/storage/`: estado local en `data/*.json`.
+* `test/`: pruebas con `node --test`.
+
+Para agregar un comando, defínelo en `src/commands.js`, implementa su handler en `src/features/` y regístralo en `src/interactions/registry.js`.
 
 ### Plan de Prueba Inmediato en Discord
 
