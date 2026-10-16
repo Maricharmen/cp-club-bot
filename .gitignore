@@ -5,6 +5,7 @@ node_modules/
 *.log
 *.key
 .ssh/
-data/voice-channels.json
+# Estado de ejecución (cumpleaños, equipos, canales de voz): vive en cada servidor, no en Git.
+data/*
+!data/.gitkeep
 data-test/
-data/*.tmp
