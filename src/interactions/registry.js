@@ -38,6 +38,11 @@ const commandHandlers = {
   'configurar-logs-voz': dynamicVoiceChannels.handleCommand
 };
 
+// Autocompletado de opciones, por nombre de comando.
+const autocompleteHandlers = {
+  ...contestImport.autocomplete
+};
+
 // Botones, menús y modals. Los botones de paginación del leaderboard no están
 // aquí porque los atiende un collector dentro del propio comando.
 const componentRoutes = [
@@ -51,4 +56,4 @@ const componentRoutes = [
   { matches: i => i.isButton() && i.customId.startsWith('help:'), handle: help.handleButton }
 ];
 
-module.exports = { commandHandlers, componentRoutes };
+module.exports = { commandHandlers, autocompleteHandlers, componentRoutes };

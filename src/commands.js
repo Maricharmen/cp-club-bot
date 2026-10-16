@@ -1,4 +1,14 @@
 const { ChannelType, SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+const { RANKS_DESCENDING, formatRankLabel } = require('./domain/ranks');
+
+// Grupo de estudiantes (G1, G2, Virtual…). Se autocompleta con los grupos de
+// la base, así que un grupo nuevo aparece sin volver a registrar comandos.
+const groupOption = opt => opt
+  .setName('grupo')
+  .setDescription('Califica solo a estudiantes de este grupo (para contests distintos por grupo)')
+  .setMaxLength(50)
+  .setAutocomplete(true)
+  .setRequired(false);
 
 const commands = [
   new SlashCommandBuilder()
@@ -24,12 +34,7 @@ const commands = [
     .setName('leaderboard')
     .setDescription('Muestra la tabla de clasificación por rangos (Sistema 12 Semanas)')
     .addStringOption(opt => opt.setName('rango').setDescription('Filtrar estudiantes de un rango específico').setRequired(false).addChoices(
-      { name: '👑 Master (2,000 - 2,200 XP)', value: 'Master' },
-      { name: '🔴 Competitor (1,600 - 1,999 XP)', value: 'Competitor' },
-      { name: '🟠 Challenger (1,200 - 1,599 XP)', value: 'Challenger' },
-      { name: '🟣 Solver (800 - 1,199 XP)', value: 'Solver' },
-      { name: '🔵 Explorer (400 - 799 XP)', value: 'Explorer' },
-      { name: '🌱 Rookie (1 - 399 XP)', value: 'Rookie' }
+      ...RANKS_DESCENDING.map(rank => ({ name: formatRankLabel(rank), value: rank.name }))
     )),
 
   new SlashCommandBuilder()
@@ -78,14 +83,16 @@ const commands = [
     .addIntegerOption(opt => opt.setName('sesion_id').setDescription('ID de la sesión en Supabase').setRequired(true))
     .addStringOption(opt => opt.setName('problemas').setDescription('Nombres o códigos separados por coma (ej: 158A, 71A)').setRequired(false))
     .addIntegerOption(opt => opt.setName('contest_id').setDescription('ID del contest público (opcional)').setRequired(false))
-    .addNumberOption(opt => opt.setName('puntos_por_problema').setDescription('Puntos por cada AC (default: 10)').setRequired(false)),
+    .addNumberOption(opt => opt.setName('puntos_por_problema').setDescription('Puntos por cada AC (default: 10)').setRequired(false))
+    .addStringOption(groupOption),
 
   new SlashCommandBuilder()
     .setName('importar-standings')
     .setDescription('Abre una ventana para pegar el texto de Standings y calificar en lote')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .addIntegerOption(opt => opt.setName('sesion_id').setDescription('ID de la sesión en Supabase').setRequired(true))
-    .addNumberOption(opt => opt.setName('puntos_por_problema').setDescription('Puntos por cada AC (default: 20)').setRequired(false)),
+    .addNumberOption(opt => opt.setName('puntos_por_problema').setDescription('Puntos por cada AC (default: 20)').setRequired(false))
+    .addStringOption(groupOption),
 
   new SlashCommandBuilder()
     .setName('crear-canal-voz')

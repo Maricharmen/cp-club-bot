@@ -1,13 +1,24 @@
 // src/domain/ranks.js
 
 const RANKS = [
-  { name: 'Rookie', badge: '🌱', minXP: 0, maxXP: 399, color: 0x2ECC71 },
-  { name: 'Explorer', badge: '🔵', minXP: 400, maxXP: 799, color: 0x3498DB },
-  { name: 'Solver', badge: '🟣', minXP: 800, maxXP: 1199, color: 0x9B59B6 },
-  { name: 'Challenger', badge: '🟠', minXP: 1200, maxXP: 1599, color: 0xE67E22 },
-  { name: 'Competitor', badge: '🔴', minXP: 1600, maxXP: 1999, color: 0xE74C3C },
-  { name: 'Master', badge: '👑', minXP: 2000, maxXP: 2200, color: 0xF1C40F }
+  { name: 'Rookie', badge: '🌱', minXP: 0, maxXP: 999, color: 0x2ECC71 },
+  { name: 'Explorer', badge: '🔵', minXP: 1000, maxXP: 1999, color: 0x3498DB },
+  { name: 'Solver', badge: '🟣', minXP: 2000, maxXP: 2999, color: 0x9B59B6 },
+  { name: 'Challenger', badge: '🟠', minXP: 3000, maxXP: 3999, color: 0xE67E22 },
+  { name: 'Competitor', badge: '🔴', minXP: 4000, maxXP: 4999, color: 0xE74C3C },
+  { name: 'Master', badge: '👑', minXP: 5000, maxXP: 5900, color: 0xF1C40F }
 ];
+
+// Los rankings excluyen a quien tiene 0 XP, así que Rookie se muestra desde 1.
+function minVisibleXp(rank) {
+  return rank.name === 'Rookie' ? 1 : rank.minXP;
+}
+
+// Etiqueta con el rango de XP, ej. "👑 Master (5,000 - 5,900 XP)".
+function formatRankLabel(rank) {
+  const format = value => value.toLocaleString('en-US');
+  return `${rank.badge} ${rank.name} (${format(minVisibleXp(rank))} - ${format(rank.maxXP)} XP)`;
+}
 
 // Orden de presentación en el leaderboard: del rango más alto al más bajo.
 const RANKS_DESCENDING = [...RANKS].reverse();
@@ -133,6 +144,8 @@ module.exports = {
   RANKS,
   RANKS_DESCENDING,
   findRankByName,
+  minVisibleXp,
+  formatRankLabel,
   getRank,
   getNextRank,
   getRankProgress,

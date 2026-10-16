@@ -30,4 +30,25 @@ function chunkLines(lines, { maxLines, maxChars }) {
   return pages;
 }
 
-module.exports = { normalizeEmail, escapeLikePattern, chunkLines };
+// "`a`, `b`, `c`" sin pasar de maxChars; si no caben todos agrega "…y N más".
+function formatCodeList(items, maxChars) {
+  const parts = [];
+  let length = 0;
+
+  for (let i = 0; i < items.length; i++) {
+    const part = `\`${items[i]}\``;
+    const remaining = items.length - i - 1;
+    const suffix = remaining > 0 ? ` …y ${remaining} más`.length : 0;
+    const added = (parts.length > 0 ? 2 : 0) + part.length;
+
+    if (length + added + suffix > maxChars) {
+      return `${parts.join(', ')} …y ${items.length - i} más`;
+    }
+    parts.push(part);
+    length += added;
+  }
+
+  return parts.join(', ');
+}
+
+module.exports = { normalizeEmail, escapeLikePattern, chunkLines, formatCodeList };

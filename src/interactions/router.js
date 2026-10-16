@@ -1,16 +1,19 @@
 const { Events } = require('discord.js');
-const { commandHandlers, componentRoutes } = require('./registry');
+const { commandHandlers, autocompleteHandlers, componentRoutes } = require('./registry');
 const { replyWithError } = require('../utils/interactions');
 
 const GENERIC_ERROR_MESSAGE = '❌ Ocurrió un error inesperado. Intenta de nuevo o contacta a un mentor.';
 
 function findHandler(interaction) {
   if (interaction.isChatInputCommand()) return commandHandlers[interaction.commandName];
+  if (interaction.isAutocomplete()) return autocompleteHandlers[interaction.commandName];
   return componentRoutes.find(route => route.matches(interaction))?.handle;
 }
 
 function describeInteraction(interaction) {
-  return interaction.isChatInputCommand() ? `/${interaction.commandName}` : interaction.customId;
+  if (interaction.isChatInputCommand()) return `/${interaction.commandName}`;
+  if (interaction.isAutocomplete()) return `autocompletado de /${interaction.commandName}`;
+  return interaction.customId;
 }
 
 // Punto único de manejo de errores: ningún fallo de un handler tumba el

@@ -8,17 +8,13 @@ const {
 const students = require('../services/students');
 const sessionRecords = require('../services/sessionRecords');
 const { getActiveCycle, getCycleSessions } = require('../services/cycles');
-const { RANKS_DESCENDING, findRankByName, groupStudentsByRank } = require('../domain/ranks');
+const { RANKS_DESCENDING, findRankByName, groupStudentsByRank, minVisibleXp } = require('../domain/ranks');
 const { parseScore } = require('../domain/xp');
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 15;
 const TOP_PER_RANK = 3;
 const PAGINATION_TIMEOUT_MS = 10 * 60 * 1000;
 const SEPARATOR = '━━━━━━━━━━━━━━━━━━━━━━━━━';
-
-function minVisibleXp(rank) {
-  return rank.name === 'Rookie' ? 1 : rank.minXP;
-}
 
 async function loadCycleStandings(cycleId) {
   const { data: estudiantes, error: errEst } = await students.listActiveStudents('id, nombre, codeforces_handle');
@@ -54,6 +50,15 @@ async function replyWithRankDetail(interaction, rankConfig, estudiantesEnRango) 
     const start = (safePage - 1) * PAGE_SIZE;
     const pageItems = estudiantesEnRango.slice(start, start + PAGE_SIZE);
 
+    // La clasificación va en la descripción (hasta 4096 caracteres): 15 filas
+    // pueden superar el límite de 1024 de un campo.
+    const clasificacion = pageItems.length > 0
+      ? pageItems.map(item => {
+        const handleStr = item.handle ? `(\`@${item.handle}\`)` : '';
+        return `\`#${item.position}\` **${item.nombre}** ${handleStr} ➔ **${item.puntos.toFixed(1)} XP**`;
+      }).join('\n')
+      : '_No hay estudiantes con puntaje registrado en este rango aún._';
+
     const embed = new EmbedBuilder()
       .setTitle(`${rankConfig.badge} Rango ${rankConfig.name.toUpperCase()}`)
       .setColor(rankConfig.color)
@@ -61,18 +66,9 @@ async function replyWithRankDetail(interaction, rankConfig, estudiantesEnRango) 
         `**Umbral:** \`${minVisibleXp(rankConfig)} - ${rankConfig.maxXP} XP\`\n` +
         `**Estudiantes clasificados:** \`${estudiantesEnRango.length}\`\n` +
         `**Página:** \`${safePage}/${totalPages}\`\n` +
-        SEPARATOR
+        `${SEPARATOR}\n` +
+        `**🏆 Clasificación**\n${clasificacion}`
       )
-      .addFields({
-        name: '🏆 Clasificación',
-        value: pageItems.length > 0
-          ? pageItems.map(item => {
-            const handleStr = item.handle ? `(\`@${item.handle}\`)` : '';
-            return `\`#${item.position}\` **${item.nombre}** ${handleStr} ➔ **${item.puntos.toFixed(1)} XP**`;
-          }).join('\n')
-          : '_No hay estudiantes con puntaje registrado en este rango aún._',
-        inline: false
-      })
       .setFooter({ text: 'CPC Ranking System' })
       .setTimestamp();
 

@@ -55,6 +55,12 @@ function formatXp(xp) {
   return xp === null ? 'Sin ciclo activo' : `${xp.toFixed(1)} XP`;
 }
 
+const LEVEL_UP_TITLE = '🎉 ¡NUEVO RANGO ALCANZADO!';
+
+function levelUpDetail(rank, nombre, xp) {
+  return `${rank.badge} **${nombre}** ascendió al rango **${rank.name.toUpperCase()}** (${formatXp(xp)})`;
+}
+
 // /calificar-mock
 async function handleGradeMockCommand(interaction) {
   const feedback = interaction.options.getString('feedback').trim();
@@ -79,8 +85,8 @@ async function handleGradeMockCommand(interaction) {
 
   if (nuevoRango) {
     embed.addFields({
-      name: '🎉 ¡NUEVO RANGO ALCANZADO!',
-      value: `${nuevoRango.badge} **${estudiante.nombre}** ascendió al rango **${nuevoRango.name.toUpperCase()}**!`,
+      name: LEVEL_UP_TITLE,
+      value: levelUpDetail(nuevoRango, estudiante.nombre, xpNuevo),
       inline: false
     });
   }
@@ -108,7 +114,7 @@ async function handleGradeContestCommand(interaction) {
     (feedback ? `• **Feedback:** ${feedback}\n` : '');
 
   if (nuevoRango) {
-    respuesta += `\n🎉 **¡NUEVO RANGO ALCANZADO!**\n${nuevoRango.badge} **${estudiante.nombre}** ascendió a **${nuevoRango.name.toUpperCase()}** (${formatXp(xpNuevo)}).`;
+    respuesta += `\n**${LEVEL_UP_TITLE}**\n${levelUpDetail(nuevoRango, estudiante.nombre, xpNuevo)}`;
   }
 
   return interaction.editReply(respuesta);

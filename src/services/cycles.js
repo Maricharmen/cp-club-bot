@@ -12,7 +12,8 @@ async function getCycleSessions(cycleId, columns = 'id') {
   return supabase
     .from('sesiones')
     .select(columns)
-    .eq('ciclo_id', cycleId);
+    .eq('ciclo_id', cycleId)
+    .order('id', { ascending: true });
 }
 
 module.exports = { getActiveCycle, getCycleSessions };

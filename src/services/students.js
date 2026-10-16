@@ -1,5 +1,6 @@
-const { supabase } = require('./supabase');
+const { supabase, fetchAllRows } = require('./supabase');
 const { escapeLikePattern } = require('../utils/text');
+const { uniqueGroups } = require('../domain/groups');
 
 async function findStudentByEmail(email, columns = '*') {
   return supabase
@@ -46,9 +47,22 @@ async function listActiveStudents(columns) {
 async function listActiveStudentsWithHandle() {
   return supabase
     .from('estudiantes')
-    .select('id, nombre, codeforces_handle')
+    .select('id, nombre, codeforces_handle, grupo')
     .not('codeforces_handle', 'is', null)
     .eq('status', 'ACTIVO');
+}
+
+// Grupos que existen entre los estudiantes activos (ej. G1, G2, Virtual).
+async function listActiveGroups() {
+  const { data, error } = await fetchAllRows(() => supabase
+    .from('estudiantes')
+    .select('grupo')
+    .eq('status', 'ACTIVO')
+    .not('grupo', 'is', null)
+    .order('id'));
+  if (error) return { data: null, error };
+
+  return { data: uniqueGroups(data.map(row => row.grupo)), error: null };
 }
 
 async function listActiveStudentsInProgram(program, columns) {
@@ -65,5 +79,6 @@ module.exports = {
   updateStudent,
   listActiveStudents,
   listActiveStudentsWithHandle,
-  listActiveStudentsInProgram
+  listActiveStudentsInProgram,
+  listActiveGroups
 };

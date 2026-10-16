@@ -11,6 +11,8 @@ const config = {
   supabaseUrl: process.env.SUPABASE_URL,
   supabaseKey: process.env.SUPABASE_KEY,
   birthdayTimeZone: process.env.BIRTHDAY_TIMEZONE || 'America/Merida',
+  // Zona horaria para decidir qué sesiones ya ocurrieron.
+  timeZone: process.env.TIMEZONE || process.env.BIRTHDAY_TIMEZONE || 'America/Merida',
   dataDirectory: path.resolve(process.env.DATA_DIR || path.join(__dirname, '..', 'data'))
 };
 
